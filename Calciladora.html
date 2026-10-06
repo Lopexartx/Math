@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculadora de derivadas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
+<style>
+:root{--bg:#e9e6df;--body:#2b2f36;--screen:#c9d3c0;--ink:#1c2a1f;--key:#f7f5f0;--keytext:#23262c;--fn:#d8d4ca;--acc:#1f5f8b;--acctext:#fff;--line:#b9b5aa;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--body:#24272c;--screen:#2c3a2f;--ink:#d5efd9;--key:#3a3e45;--keytext:#eceff3;--fn:#2f3238;--acc:#4a9bd1;--acctext:#08131c;--line:#4a4e56}}
+:root[data-theme="dark"]{--bg:#15171a;--body:#24272c;--screen:#2c3a2f;--ink:#d5efd9;--key:#3a3e45;--keytext:#eceff3;--fn:#2f3238;--acc:#4a9bd1;--acctext:#08131c;--line:#4a4e56}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--keytext);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+main{max-width:440px;margin:0 auto;padding:16px}
+.calc{background:var(--body);border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.screen{background:var(--screen);color:var(--ink);border-radius:12px;padding:10px 12px;font-family:"Courier New",ui-monospace,monospace;box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
+.hist{max-height:230px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:6px;margin-bottom:8px;min-height:44px}
+.row{border-bottom:1px dashed color-mix(in srgb,var(--ink) 30%,transparent);padding-bottom:5px;word-break:break-word}
+.row:last-child{border:0}
+.row b{display:block;font-size:.78rem;opacity:.7;font-weight:600}
+.row span{font-size:1.05rem}
+.row.last span{font-size:1.25rem;font-weight:700}
+.empty{opacity:.6;font-size:.9rem}
+#inp{width:100%;background:transparent;border:0;border-top:2px solid var(--ink);color:var(--ink);font:inherit;font-size:1.3rem;padding:8px 0 2px;outline:none}
+#err{min-height:1.2em;color:#b3261e;font-size:.82rem;margin:6px 2px 0;font-family:inherit}
+:root[data-theme="dark"] #err{color:#ff9a90}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #err{color:#ff9a90}}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+button{font:inherit;font-size:1.05rem;border:0;border-radius:10px;padding:13px 0;background:var(--key);color:var(--keytext);cursor:pointer;box-shadow:0 2px 0 var(--line);touch-action:manipulation}
+button:active{transform:translateY(2px);box-shadow:none}
+button:focus-visible,#inp:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+button.fn{background:var(--fn);font-size:.92rem}
+button.eq{background:var(--acc);color:var(--acctext);font-weight:700;font-size:1.3rem}
+p.help{font-size:.82rem;line-height:1.45;margin:14px 4px 0;opacity:.8}
+</style>
+</head>
+<body>
+<main>
+<div class="calc">
+  <div class="screen">
+    <div class="hist" id="hist"><div class="empty">Escribe una función de x y pulsa =</div></div>
+    <input id="inp" value="x^3*sin(x)" autocomplete="off" spellcheck="false" aria-label="Función f(x)">
+  </div>
+  <div id="err" role="alert"></div>
+  <div class="pad" id="pad"></div>
+</div>
+<p class="help">Cada vez que pulses <b>=</b> se calcula la siguiente derivada. Si cambias la función, se empieza de nuevo. Usa <code>^</code> para potencias, y multiplicación implícita como <code>2x</code> o <code>3sin(x)</code>.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const inp=$('inp'),hist=$('hist'),err=$('err'),pad=$('pad');
+let state=null;
+const keys=[
+ ['sin','sin(','fn'],['cos','cos(','fn'],['tan','tan(','fn'],['ln','ln(','fn'],['log','log10(','fn'],
+ ['asin','asin(','fn'],['acos','acos(','fn'],['atan','atan(','fn'],['eˣ','exp(','fn'],['√','sqrt(','fn'],
+ ['x','x'],['(','('],[')',')'],['^','^'],['⌫','BS','fn'],
+ ['7','7'],['8','8'],['9','9'],['÷','/'],['C','CLR','fn'],
+ ['4','4'],['5','5'],['6','6'],['×','*'],['|x|','abs(','fn'],
+ ['1','1'],['2','2'],['3','3'],['−','-'],['π','π'],
+ ['0','0'],['.','.'],['e','e'],['+','+'],['=','EQ','eq']
+];
+keys.forEach(([t,v,c])=>{const b=document.createElement('button');b.textContent=t;b.dataset.v=v;if(c)b.className=c;b.setAttribute('aria-label',t);pad.appendChild(b)});
+pad.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.v;
+ if(v==='EQ')return equals();
+ if(v==='CLR'){inp.value='';reset();inp.focus();return}
+ if(v==='BS'){const s=inp.selectionStart,f=inp.selectionEnd;if(s!==f)inp.setRangeText('',s,f,'end');else if(s>0)inp.setRangeText('',s-1,s,'end');inp.focus();return}
+ inp.setRangeText(v,inp.selectionStart,inp.selectionEnd,'end');inp.focus()});
+inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();equals()}});
+inp.addEventListener('input',()=>{if(state&&state.src!==inp.value)reset()});
+
+const sup={0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
+function label(n){if(n===0)return'f(x)';if(n===1)return'f′(x)';if(n===2)return'f″(x)';if(n===3)return'f‴(x)';
+ return'f⁽'+String(n).split('').map(d=>sup[d]).join('')+'⁾(x)'}
+function norm(s){return s.replace(/\bln\(/g,'log(').replace(/π/g,'pi').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/√\(/g,'sqrt(').trim()}
+function pretty(node){return node.toString({parenthesis:'auto',implicit:'hide'}).replace(/\blog\(/g,'ln(').replace(/\bpi\b/g,'π').replace(/ \* /g,'·')}
+function simp(n){try{return math.simplify(n)}catch(e){return n}}
+function reset(){state=null;hist.innerHTML='<div class="empty">Escribe una función de x y pulsa =</div>';err.textContent=''}
+function add(n,node,text){
+ hist.querySelectorAll('.last').forEach(r=>r.classList.remove('last'));
+ hist.querySelectorAll('.empty').forEach(r=>r.remove());
+ const d=document.createElement('div');d.className='row last';
+ d.innerHTML='<b></b><span></span>';d.firstChild.textContent=label(n);d.lastChild.textContent=text||pretty(node);
+ hist.insertBefore(d,hist.firstChild);hist.scrollTop=0}
+function equals(){
+ err.textContent='';
+ try{
+  const src=inp.value;
+  if(!src.trim()){err.textContent='Escribe una función primero.';return}
+  if(!state||state.src!==src){
+   const node=simp(math.parse(norm(src)));
+   node.evaluate({x:1}); // valida que solo dependa de símbolos conocidos
+   hist.innerHTML='';state={src,node,n:0,zero:false};add(0,node);
+  }
+  if(state.zero){err.textContent='Ya llegaste a 0: todas las derivadas siguientes también son 0.';return}
+  const d=simp(math.derivative(state.node,'x'));
+  state.node=d;state.n++;add(state.n,d);
+  if(d.toString()==='0')state.zero=true;
+ }catch(e){
+  err.textContent='No se pudo procesar: '+(e.message||e).toString().slice(0,110);
+ }
+}
+</script>
+</body>
+</html>

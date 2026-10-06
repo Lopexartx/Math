@@ -89,7 +89,7 @@ function equals(){
   if(!src.trim()){err.textContent='Escribe una función primero.';return}
   if(!state||state.src!==src){
    const node=simp(math.parse(norm(src)));
-   node.evaluate({x:1}); // valida que solo dependa de símbolos conocidos
+   node.evaluate({x:1}); 
    hist.innerHTML='';state={src,node,n:0,zero:false};add(0,node);
   }
   if(state.zero){err.textContent='Ya llegaste a 0: todas las derivadas siguientes también son 0.';return}
